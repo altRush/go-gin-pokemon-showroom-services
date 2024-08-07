@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 )
 
@@ -27,21 +28,12 @@ type Pokemon_profile_with_types struct {
 }
 
 type Pokemon_profile_db struct {
-	Name   string `db:"name"`
-	Url    string `db:"url"`
-	Sprite string `db:"sprite"`
-}
-
-var stored_pokemon = Pokemon_profile_with_types{
-	Name:   "test name",
-	Url:    "test url",
-	Sprite: "test sprite",
-	Type: Type{
-		Type_name: "test type name",
-		Url:       "test url",
-	},
-	Pokemon_store_id: 0,
-	Trainer_id:       "test trainer id",
+	Name             string         `db:"name"`
+	Url              string         `db:"url"`
+	Sprite           string         `db:"sprite"`
+	Types            pq.StringArray `db:"types"`
+	Pokemon_store_id string         `db:"pokemon_store_id"`
+	Trainer_id       *string        `db:"trainer_id"`
 }
 
 func getStoredPokemonById(c *gin.Context) {
@@ -57,30 +49,27 @@ func getStoredPokemonById(c *gin.Context) {
 		panic(err)
 	}
 
-	rows, err := db.Query("SELECT name, url, sprite FROM stored_pokemons")
+	rows, err := db.Query("SELECT * FROM stored_pokemons")
 	if err != nil {
 		panic(err)
 	}
 
-	var (
-		name   string
-		url    string
-		sprite string
-	)
+	var pokemons []Pokemon_profile_db
 
 	for rows.Next() {
-		err := rows.Scan(&name, &url, &sprite)
+		var pkms Pokemon_profile_db
+		err := rows.Scan(&pkms.Name, &pkms.Url, &pkms.Sprite, &pkms.Types, &pkms.Pokemon_store_id, &pkms.Trainer_id)
 		if err != nil {
 			log.Fatalln(err)
 		}
-		log.Printf("%#v\n", name, "%#v\n", url, "%#v\n", sprite)
+		pokemons = append(pokemons, pkms)
 	}
 
 	rows.Close()
 
 	db.Close()
 
-	c.IndentedJSON(http.StatusOK, stored_pokemon)
+	c.IndentedJSON(http.StatusOK, pokemons)
 }
 
 func main() {
