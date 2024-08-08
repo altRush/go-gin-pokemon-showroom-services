@@ -12,6 +12,7 @@ func main() {
 
 	router := gin.Default()
 	router.GET("/store/all", store_pokemons.GetAllStoredPokemons)
+	router.GET("/store/:pokemonStoreId", store_pokemons.GetPokemonByStoreIdFromStore)
 
 	router.Run("localhost:8080")
 }
