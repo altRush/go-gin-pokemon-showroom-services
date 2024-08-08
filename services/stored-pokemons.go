@@ -85,5 +85,5 @@ func GetAllStoredPokemons(c *gin.Context) {
 
 	db.Close()
 
-	c.IndentedJSON(http.StatusOK, pokemons)
+	c.JSON(http.StatusOK, pokemons)
 }
