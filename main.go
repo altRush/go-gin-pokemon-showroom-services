@@ -2,10 +2,12 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -13,18 +15,18 @@ import (
 	_ "github.com/lib/pq"
 )
 
-type Type struct {
+type Types struct {
 	Type_name string `json:"type_name"`
 	Url       string `json:"url"`
 }
 
 type Pokemon_profile_with_types struct {
-	Name             string `json:"name"`
-	Url              string `json:"url"`
-	Sprite           string `json:"sprite"`
-	Type             Type   `json:"type"`
-	Pokemon_store_id int    `json:"pokemon_store_id"`
-	Trainer_id       string `json:"trainer_id"`
+	Name             string  `json:"name"`
+	Url              string  `json:"url"`
+	Sprite           string  `json:"sprite"`
+	Types            []Types `json:"types"`
+	Pokemon_store_id int     `json:"pokemon_store_id"`
+	Trainer_id       string  `json:"trainer_id"`
 }
 
 type Pokemon_profile_db struct {
@@ -32,11 +34,11 @@ type Pokemon_profile_db struct {
 	Url              string         `db:"url"`
 	Sprite           string         `db:"sprite"`
 	Types            pq.StringArray `db:"types"`
-	Pokemon_store_id string         `db:"pokemon_store_id"`
+	Pokemon_store_id int            `db:"pokemon_store_id"`
 	Trainer_id       *string        `db:"trainer_id"`
 }
 
-func getStoredPokemonById(c *gin.Context) {
+func getAllStoredPokemons(c *gin.Context) {
 	godotenv.Load()
 
 	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s "+
@@ -54,7 +56,7 @@ func getStoredPokemonById(c *gin.Context) {
 		panic(err)
 	}
 
-	var pokemons []Pokemon_profile_db
+	var pokemons []Pokemon_profile_with_types
 
 	for rows.Next() {
 		var pkms Pokemon_profile_db
@@ -62,7 +64,54 @@ func getStoredPokemonById(c *gin.Context) {
 		if err != nil {
 			log.Fatalln(err)
 		}
-		pokemons = append(pokemons, pkms)
+		var pkmnsWithTypes Pokemon_profile_with_types
+
+		typesJson, err := json.Marshal(pkms.Types)
+
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		foo := string(typesJson)
+		bar := strings.Trim(foo, "[]")
+		baz := strings.Replace(bar, "\"", "'", 4)
+
+		unnestSql := fmt.Sprintf("select t.* from unnest(array[%s]) type_name_s left join types t on t.type_name = type_name_s", baz)
+
+		typesRows, err := db.Query(unnestSql)
+
+		if err != nil {
+			panic(err)
+		}
+
+		var types []Types
+
+		for typesRows.Next() {
+			var t Types
+			err := typesRows.Scan(&t.Type_name, &t.Url)
+			if err != nil {
+				log.Fatalln(err)
+			}
+
+			types = append(types, t)
+		}
+
+		var trainer_id string
+		if pkms.Trainer_id != nil {
+			trainer_id = *pkms.Trainer_id
+		}
+
+		pkmnsWithTypes = Pokemon_profile_with_types{
+			Name:             pkms.Name,
+			Url:              pkms.Url,
+			Sprite:           pkms.Sprite,
+			Pokemon_store_id: pkms.Pokemon_store_id,
+			Trainer_id:       trainer_id,
+			Types:            types,
+		}
+		pokemons = append(pokemons, pkmnsWithTypes)
+
+		typesRows.Close()
 	}
 
 	rows.Close()
@@ -74,7 +123,7 @@ func getStoredPokemonById(c *gin.Context) {
 
 func main() {
 	router := gin.Default()
-	router.GET("/store", getStoredPokemonById)
+	router.GET("/store/all", getAllStoredPokemons)
 
 	router.Run("localhost:8080")
 }
