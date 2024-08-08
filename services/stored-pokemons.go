@@ -28,7 +28,7 @@ func AddPokemonToStore(c *gin.Context) {
 
 	typesString := utils.ConvertDbArrayToUnnestArrayString(pokemonProfile.Types)
 
-	_, dbErr := db.Exec("INSERT INTO public.stored_pokemons (name, url, sprite, types, trainer_id) VALUES ('" + pokemonProfile.Name + "', '" + pokemonProfile.Url + "','" + pokemonProfile.Sprite + "', ARRAY[" + typesString + "], '" + pokemonProfile.Trainer_id + "'::uuid)")
+	_, dbErr := db.Exec("INSERT INTO public.stored_pokemons (name, url, sprite, types, trainer_id) VALUES ($1, $2, $3, ARRAY[$4], $5 ::uuid)", pokemonProfile.Name, pokemonProfile.Url, pokemonProfile.Sprite, typesString, pokemonProfile.Trainer_id)
 
 	if dbErr != nil {
 		panic(dbErr)
