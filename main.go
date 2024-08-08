@@ -14,5 +14,7 @@ func main() {
 	router.GET("/store/all", store_pokemons.GetAllStoredPokemons)
 	router.GET("/store/:pokemonStoreId", store_pokemons.GetPokemonByStoreIdFromStore)
 
+	router.POST("/store", store_pokemons.AddPokemonToStore)
+
 	router.Run("localhost:8080")
 }

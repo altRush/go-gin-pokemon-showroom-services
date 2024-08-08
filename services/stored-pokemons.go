@@ -12,6 +12,32 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func AddPokemonToStore(c *gin.Context) {
+	var pokemonProfile types.Pokemon_profile
+	c.BindJSON(&pokemonProfile)
+
+	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s "+
+		"password=%s dbname=%s sslmode=disable",
+		os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_USERNAME"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_DATABASE"))
+
+	db, err := sql.Open("postgres", psqlInfo)
+
+	if err != nil {
+		panic(err)
+	}
+
+	typesString := utils.ConvertDbArrayToUnnestArrayString(pokemonProfile.Types)
+
+	_, dbErr := db.Exec("INSERT INTO public.stored_pokemons (name, url, sprite, types, trainer_id) VALUES ('" + pokemonProfile.Name + "', '" + pokemonProfile.Url + "','" + pokemonProfile.Sprite + "', ARRAY[" + typesString + "], '" + pokemonProfile.Trainer_id + "'::uuid)")
+
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
+	add_pokemon_to_store := types.Add_pokemon_to_store{Result: "Added to store"}
+	c.JSON(http.StatusCreated, add_pokemon_to_store)
+}
+
 func GetPokemonByStoreIdFromStore(c *gin.Context) {
 	pokemonStoreId := c.Param("pokemonStoreId")
 
@@ -25,9 +51,7 @@ func GetPokemonByStoreIdFromStore(c *gin.Context) {
 		panic(err)
 	}
 
-	var pokemon types.Pokemon_profile_db
-
-	fmt.Println("hey", pokemonStoreId)
+	var pokemon types.Pokemon_profile_from_db
 
 	row := db.QueryRow("SELECT * FROM stored_pokemons WHERE pokemon_store_id = $1", pokemonStoreId)
 
@@ -37,8 +61,7 @@ func GetPokemonByStoreIdFromStore(c *gin.Context) {
 		panic(scanErr)
 	}
 
-	var pkmnsWithTypes types.Pokemon_profile_with_types
-
+	var pkmnsWithTypes types.Pokemon_profile_from_db_with_types
 	typesString := utils.ConvertDbArrayToUnnestArrayString(pokemon.Types)
 
 	unnestSql := fmt.Sprintf("select t.* from unnest(array[%s]) type_name_s left join types t on t.type_name = type_name_s", typesString)
@@ -66,7 +89,7 @@ func GetPokemonByStoreIdFromStore(c *gin.Context) {
 		trainer_id = *pokemon.Trainer_id
 	}
 
-	pkmnsWithTypes = types.Pokemon_profile_with_types{
+	pkmnsWithTypes = types.Pokemon_profile_from_db_with_types{
 		Name:             pokemon.Name,
 		Url:              pokemon.Url,
 		Sprite:           pokemon.Sprite,
@@ -97,16 +120,14 @@ func GetAllStoredPokemons(c *gin.Context) {
 		panic(err)
 	}
 
-	var pokemons []types.Pokemon_profile_with_types
-
+	var pokemons []types.Pokemon_profile_from_db_with_types
 	for rows.Next() {
-		var pkms types.Pokemon_profile_db
+		var pkms types.Pokemon_profile_from_db
 		err := rows.Scan(&pkms.Name, &pkms.Url, &pkms.Sprite, &pkms.Types, &pkms.Pokemon_store_id, &pkms.Trainer_id)
 		if err != nil {
 			log.Fatalln(err)
 		}
-		var pkmnsWithTypes types.Pokemon_profile_with_types
-
+		var pkmnsWithTypes types.Pokemon_profile_from_db_with_types
 		typesString := utils.ConvertDbArrayToUnnestArrayString(pkms.Types)
 
 		unnestSql := fmt.Sprintf("select t.* from unnest(array[%s]) type_name_s left join types t on t.type_name = type_name_s", typesString)
@@ -134,7 +155,7 @@ func GetAllStoredPokemons(c *gin.Context) {
 			trainer_id = *pkms.Trainer_id
 		}
 
-		pkmnsWithTypes = types.Pokemon_profile_with_types{
+		pkmnsWithTypes = types.Pokemon_profile_from_db_with_types{
 			Name:             pkms.Name,
 			Url:              pkms.Url,
 			Sprite:           pkms.Sprite,
