@@ -1,20 +1,52 @@
 package main
 
 import (
-	store_pokemons "github.com/altRush/go-gin-pokemon-showroom-services/services"
-
+	"github.com/altRush/go-gin-pokemon-showroom-services/models"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
+
+	"net/http"
 )
 
 func main() {
-	godotenv.Load()
 
 	router := gin.Default()
-	router.GET("/store/all", store_pokemons.GetAllStoredPokemons)
-	router.GET("/store/:pokemonStoreId", store_pokemons.GetPokemonByStoreIdFromStore)
 
-	router.POST("/store", store_pokemons.AddPokemonToStore)
+	router.GET("/store/all", getAllStoredPokemons)
+	router.GET("/store/:pokemonStoreId", getPokemonByStoreIdFromStore)
+
+	router.POST("/store", addPokemonToStore)
 
 	router.Run("localhost:8080")
+}
+
+func addPokemonToStore(c *gin.Context) {
+
+	add_pokemon_to_store, err := models.AddPokemonToStore(c)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, err)
+	}
+
+	c.JSON(http.StatusCreated, add_pokemon_to_store)
+}
+
+func getPokemonByStoreIdFromStore(c *gin.Context) {
+	pokemon, err := models.GetPokemonByStoreIdFromStore(c)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, err)
+	}
+
+	c.JSON(http.StatusOK, pokemon)
+
+}
+
+func getAllStoredPokemons(c *gin.Context) {
+	allStoredPokemon, err := models.GetAllStoredPokemons(c)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, err)
+	}
+
+	c.JSON(http.StatusOK, allStoredPokemon)
 }

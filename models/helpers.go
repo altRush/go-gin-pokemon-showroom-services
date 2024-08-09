@@ -1,4 +1,4 @@
-package utils
+package models
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"github.com/lib/pq"
 )
 
-func ConvertDbArrayToUnnestArrayString(dbArray pq.StringArray) string {
+func convertDbArrayToUnnestArrayString(dbArray pq.StringArray) string {
 	byteArray, err := json.Marshal(dbArray)
 
 	if err != nil {
