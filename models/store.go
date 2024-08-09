@@ -147,8 +147,6 @@ func GetAllStoredPokemons(c *gin.Context) ([]Pokemon_profile_from_db_with_types,
 		var pkmnsWithTypes Pokemon_profile_from_db_with_types
 		typesString := convertDbArrayToUnnestArrayString(pkms.Types)
 
-		fmt.Println(typesString)
-
 		unnestSql := fmt.Sprintf("select t.* from unnest(array[%s]) type_name_s left join types t on t.type_name = type_name_s", typesString)
 
 		typesRows, err = db.Query(unnestSql)
