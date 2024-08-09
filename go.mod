@@ -1,4 +1,4 @@
-module go-gin-pokemon-showroom-services
+module github.com/altRush/go-gin-pokemon-showroom-services
 
 go 1.18
 

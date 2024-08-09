@@ -1,7 +1,7 @@
 package main
 
 import (
-	store_pokemons "go-gin-pokemon-showroom-services/services"
+	store_pokemons "github.com/altRush/go-gin-pokemon-showroom-services/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"

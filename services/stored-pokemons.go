@@ -3,11 +3,12 @@ package store_pokemons
 import (
 	"database/sql"
 	"fmt"
-	"go-gin-pokemon-showroom-services/types"
-	"go-gin-pokemon-showroom-services/utils"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/altRush/go-gin-pokemon-showroom-services/types"
+	"github.com/altRush/go-gin-pokemon-showroom-services/utils"
 
 	"github.com/gin-gonic/gin"
 )
