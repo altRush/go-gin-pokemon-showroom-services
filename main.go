@@ -1,10 +1,11 @@
 package main
 
 import (
+	"database/sql"
+	"net/http"
+
 	"github.com/altRush/go-gin-pokemon-showroom-services/models"
 	"github.com/gin-gonic/gin"
-
-	"net/http"
 )
 
 func main() {
@@ -20,32 +21,34 @@ func main() {
 }
 
 func addPokemonToStore(c *gin.Context) {
-
-	add_pokemon_to_store, err := models.AddPokemonToStore(c)
-
+	result, err := models.AddPokemonToStore(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, err)
+		return
 	}
 
-	c.JSON(http.StatusCreated, add_pokemon_to_store)
+	c.JSON(http.StatusCreated, result)
 }
 
 func getPokemonByStoreIdFromStore(c *gin.Context) {
 	pokemon, err := models.GetPokemonByStoreIdFromStore(c)
-
 	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "pokemon not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, pokemon)
-
 }
 
 func getAllStoredPokemons(c *gin.Context) {
 	allStoredPokemon, err := models.GetAllStoredPokemons(c)
-
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, allStoredPokemon)

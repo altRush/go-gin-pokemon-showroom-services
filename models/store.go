@@ -1,191 +1,160 @@
 package models
 
 import (
-	"database/sql"
-	"fmt"
-	"os"
-
 	"github.com/lib/pq"
 
 	"github.com/gin-gonic/gin"
 )
 
-type PokemonTypes struct {
-	Type_name string `json:"type_name"`
-	Url       string `json:"url"`
+type PokemonType struct {
+	TypeName string `json:"type_name"`
+	Url      string `json:"url"`
 }
 
-type Pokemon_profile_from_db_with_types struct {
-	Name             string         `json:"name"`
-	Url              string         `json:"url"`
-	Sprite           string         `json:"sprite"`
-	Types            []PokemonTypes `json:"types"`
-	Pokemon_store_id int            `json:"pokemon_store_id"`
-	Trainer_id       string         `json:"trainer_id"`
+type PokemonProfileFromDBWithTypes struct {
+	Name           string        `json:"name"`
+	Url            string        `json:"url"`
+	Sprite         string        `json:"sprite"`
+	Types          []PokemonType `json:"types"`
+	PokemonStoreID int           `json:"pokemon_store_id"`
+	TrainerID      string        `json:"trainer_id"`
 }
 
-type Pokemon_profile_from_db struct {
-	Name             string         `db:"name"`
-	Url              string         `db:"url"`
-	Sprite           string         `db:"sprite"`
-	Types            pq.StringArray `db:"types"`
-	Pokemon_store_id int            `db:"pokemon_store_id"`
-	Trainer_id       *string        `db:"trainer_id"`
+type PokemonProfileFromDB struct {
+	Name           string         `db:"name"`
+	Url            string         `db:"url"`
+	Sprite         string         `db:"sprite"`
+	Types          pq.StringArray `db:"types"`
+	PokemonStoreID int            `db:"pokemon_store_id"`
+	TrainerID      *string        `db:"trainer_id"`
 }
 
-type Pokemon_profile struct {
-	Name       string   `json:"name"`
-	Url        string   `json:"url"`
-	Sprite     string   `json:"sprite"`
-	Types      []string `json:"types"`
-	Trainer_id string   `json:"trainer_id"`
+type PokemonProfile struct {
+	Name      string   `json:"name"`
+	Url       string   `json:"url"`
+	Sprite    string   `json:"sprite"`
+	Types     []string `json:"types"`
+	TrainerID string   `json:"trainer_id"`
 }
 
-type Add_pokemon_to_store struct {
+type AddResult struct {
 	Result string `json:"result"`
 }
 
-func AddPokemonToStore(c *gin.Context) (Add_pokemon_to_store, error) {
-	var pokemonProfile Pokemon_profile
-	c.BindJSON(&pokemonProfile)
-
-	typesString := convertDbArrayToUnnestArrayString(pokemonProfile.Types)
-
-	_, dbErr := db.Exec("INSERT INTO public.stored_pokemons (name, url, sprite, types, trainer_id) VALUES ($1, $2, $3, ARRAY["+typesString+"], $4 ::uuid)", pokemonProfile.Name, pokemonProfile.Url, pokemonProfile.Sprite, pokemonProfile.Trainer_id)
-
-	if dbErr != nil {
-		return Add_pokemon_to_store{}, dbErr
+func AddPokemonToStore(c *gin.Context) (AddResult, error) {
+	var pokemonProfile PokemonProfile
+	if err := c.BindJSON(&pokemonProfile); err != nil {
+		return AddResult{}, err
 	}
 
-	add_pokemon_to_store := Add_pokemon_to_store{Result: "Added to store"}
+	_, dbErr := db.Exec(
+		"INSERT INTO public.stored_pokemons (name, url, sprite, types, trainer_id) VALUES ($1, $2, $3, $4, $5 ::uuid)",
+		pokemonProfile.Name, pokemonProfile.Url, pokemonProfile.Sprite, pq.Array(pokemonProfile.Types), pokemonProfile.TrainerID,
+	)
+	if dbErr != nil {
+		return AddResult{}, dbErr
+	}
 
-	return add_pokemon_to_store, nil
+	return AddResult{Result: "Added to store"}, nil
 }
 
-func GetPokemonByStoreIdFromStore(c *gin.Context) (Pokemon_profile_from_db_with_types, error) {
-	pokemonStoreId := c.Param("pokemonStoreId")
+func GetPokemonByStoreIdFromStore(c *gin.Context) (PokemonProfileFromDBWithTypes, error) {
+	pokemonStoreID := c.Param("pokemonStoreId")
 
-	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s "+
-		"password=%s dbname=%s sslmode=disable",
-		os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_USERNAME"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_DATABASE"))
+	var pokemon PokemonProfileFromDB
 
-	db, err := sql.Open("postgres", psqlInfo)
-
-	if err != nil {
-		panic(err)
-	}
-
-	var pokemon Pokemon_profile_from_db
-
-	row := db.QueryRow("SELECT * FROM stored_pokemons WHERE pokemon_store_id = $1", pokemonStoreId)
-
-	scanErr := row.Scan(&pokemon.Name, &pokemon.Url, &pokemon.Sprite, &pokemon.Types, &pokemon.Pokemon_store_id, &pokemon.Trainer_id)
-
+	row := db.QueryRow(
+		"SELECT name, url, sprite, types, pokemon_store_id, trainer_id FROM stored_pokemons WHERE pokemon_store_id = $1",
+		pokemonStoreID,
+	)
+	scanErr := row.Scan(&pokemon.Name, &pokemon.Url, &pokemon.Sprite, &pokemon.Types, &pokemon.PokemonStoreID, &pokemon.TrainerID)
 	if scanErr != nil {
-		panic(scanErr)
+		return PokemonProfileFromDBWithTypes{}, scanErr
 	}
 
-	var pkmnsWithTypes Pokemon_profile_from_db_with_types
-	typesString := convertDbArrayToUnnestArrayString(pokemon.Types)
-
-	unnestSql := fmt.Sprintf("select t.* from unnest(array[%s]) type_name_s left join types t on t.type_name = type_name_s", typesString)
-
-	typesRows, err := db.Query(unnestSql)
-
+	unnestSql := "select t.* from unnest($1::text[]) type_name_s left join types t on t.type_name = type_name_s"
+	typesRows, err := db.Query(unnestSql, pq.Array(pokemon.Types))
 	if err != nil {
-		return Pokemon_profile_from_db_with_types{}, err
+		return PokemonProfileFromDBWithTypes{}, err
 	}
+	defer typesRows.Close()
 
-	var pokemonTypes []PokemonTypes
-
+	var pokemonTypes []PokemonType
 	for typesRows.Next() {
-		var t PokemonTypes
-		err := typesRows.Scan(&t.Type_name, &t.Url)
+		var t PokemonType
+		err := typesRows.Scan(&t.TypeName, &t.Url)
 		if err != nil {
-			return Pokemon_profile_from_db_with_types{}, err
+			return PokemonProfileFromDBWithTypes{}, err
 		}
-
 		pokemonTypes = append(pokemonTypes, t)
 	}
 
-	var trainer_id string
-	if pokemon.Trainer_id != nil {
-		trainer_id = *pokemon.Trainer_id
+	var trainerID string
+	if pokemon.TrainerID != nil {
+		trainerID = *pokemon.TrainerID
 	}
 
-	pkmnsWithTypes = Pokemon_profile_from_db_with_types{
-		Name:             pokemon.Name,
-		Url:              pokemon.Url,
-		Sprite:           pokemon.Sprite,
-		Pokemon_store_id: pokemon.Pokemon_store_id,
-		Trainer_id:       trainer_id,
-		Types:            pokemonTypes,
+	pkmnsWithTypes := PokemonProfileFromDBWithTypes{
+		Name:           pokemon.Name,
+		Url:            pokemon.Url,
+		Sprite:         pokemon.Sprite,
+		PokemonStoreID: pokemon.PokemonStoreID,
+		TrainerID:      trainerID,
+		Types:          pokemonTypes,
 	}
-
-	typesRows.Close()
 
 	return pkmnsWithTypes, nil
-
 }
 
-func GetAllStoredPokemons(c *gin.Context) ([]Pokemon_profile_from_db_with_types, error) {
-
-	rows, err := db.Query("SELECT * FROM stored_pokemons")
+func GetAllStoredPokemons(c *gin.Context) ([]PokemonProfileFromDBWithTypes, error) {
+	rows, err := db.Query("SELECT name, url, sprite, types, pokemon_store_id, trainer_id FROM stored_pokemons")
 	if err != nil {
-		return []Pokemon_profile_from_db_with_types{}, err
+		return []PokemonProfileFromDBWithTypes{}, err
 	}
+	defer rows.Close()
 
-	var pokemons []Pokemon_profile_from_db_with_types
-	var typesRows *sql.Rows
+	var pokemons []PokemonProfileFromDBWithTypes
 
 	for rows.Next() {
-		var pkms Pokemon_profile_from_db
-		err = rows.Scan(&pkms.Name, &pkms.Url, &pkms.Sprite, &pkms.Types, &pkms.Pokemon_store_id, &pkms.Trainer_id)
+		var pkms PokemonProfileFromDB
+		err = rows.Scan(&pkms.Name, &pkms.Url, &pkms.Sprite, &pkms.Types, &pkms.PokemonStoreID, &pkms.TrainerID)
 		if err != nil {
-			return []Pokemon_profile_from_db_with_types{}, err
-		}
-		var pkmnsWithTypes Pokemon_profile_from_db_with_types
-		typesString := convertDbArrayToUnnestArrayString(pkms.Types)
-
-		unnestSql := fmt.Sprintf("select t.* from unnest(array[%s]) type_name_s left join types t on t.type_name = type_name_s", typesString)
-
-		typesRows, err = db.Query(unnestSql)
-
-		if err != nil {
-			return []Pokemon_profile_from_db_with_types{}, err
+			return []PokemonProfileFromDBWithTypes{}, err
 		}
 
-		var pokemonTypes []PokemonTypes
+		unnestSql := "select t.* from unnest($1::text[]) type_name_s left join types t on t.type_name = type_name_s"
+		typesRows, err := db.Query(unnestSql, pq.Array(pkms.Types))
+		if err != nil {
+			return []PokemonProfileFromDBWithTypes{}, err
+		}
 
+		var pokemonTypes []PokemonType
 		for typesRows.Next() {
-			var t PokemonTypes
-			err = typesRows.Scan(&t.Type_name, &t.Url)
+			var t PokemonType
+			err = typesRows.Scan(&t.TypeName, &t.Url)
 			if err != nil {
-				return []Pokemon_profile_from_db_with_types{}, err
+				typesRows.Close()
+				return []PokemonProfileFromDBWithTypes{}, err
 			}
-
 			pokemonTypes = append(pokemonTypes, t)
 		}
+		typesRows.Close()
 
-		var trainer_id string
-		if pkms.Trainer_id != nil {
-			trainer_id = *pkms.Trainer_id
+		var trainerID string
+		if pkms.TrainerID != nil {
+			trainerID = *pkms.TrainerID
 		}
 
-		pkmnsWithTypes = Pokemon_profile_from_db_with_types{
-			Name:             pkms.Name,
-			Url:              pkms.Url,
-			Sprite:           pkms.Sprite,
-			Pokemon_store_id: pkms.Pokemon_store_id,
-			Trainer_id:       trainer_id,
-			Types:            pokemonTypes,
+		pkmnsWithTypes := PokemonProfileFromDBWithTypes{
+			Name:           pkms.Name,
+			Url:            pkms.Url,
+			Sprite:         pkms.Sprite,
+			PokemonStoreID: pkms.PokemonStoreID,
+			TrainerID:      trainerID,
+			Types:          pokemonTypes,
 		}
 		pokemons = append(pokemons, pkmnsWithTypes)
-
-		typesRows.Close()
 	}
-
-	rows.Close()
 
 	return pokemons, nil
 }
